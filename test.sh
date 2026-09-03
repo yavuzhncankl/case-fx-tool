@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
-# Runs your tests. They must pass with no network at all: we run this with
-# FX_UPSTREAM_BASE pointing at a closed port.
+# Runs the tests. They never open a socket: the upstream is served in-process
+# by an httpx MockTransport, so the suite passes with no network at all and
+# ignores whatever $FX_UPSTREAM_BASE points at.
 set -euo pipefail
-echo "test.sh is not implemented yet" >&2
-exit 1
+cd "$(dirname "$0")"
+
+PYTHON_BIN="${PYTHON:-python3}"
+VENV=".venv"
+
+if [ ! -d "$VENV" ]; then
+  "$PYTHON_BIN" -m venv "$VENV"
+fi
+
+"$VENV/bin/pip" install --quiet --disable-pip-version-check -r requirements-dev.txt || true
+
+if ! "$VENV/bin/python" -c "import fastapi, httpx, pytest" >/dev/null 2>&1; then
+  echo "Dependencies are missing and could not be installed. Run: pip install -r requirements-dev.txt" >&2
+  exit 1
+fi
+
+exec "$VENV/bin/python" -m pytest -q
