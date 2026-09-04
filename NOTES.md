@@ -64,27 +64,49 @@ bad moment is not a fact.
 
 ## AI tools
 
-Claude Code, the way I normally work: I decided the behaviour first — what
-happens on a weekend, what happens on a future date, what the error shape is —
-and used it to write the modules, the parametrised tests and the first drafts of
-these documents. I reviewed every file, and I ran the thing rather than trusting
-that it worked: the suite against an in-process fake upstream, then the real
-service against a small local stub, and for Part B I ran `tool.py` itself
-against that stub so every finding in `REVIEW.md` has an observed number behind
-it rather than a guess.
+Claude Code, heavily. "I used AI" can mean very different things, so here is the
+division of labour, plainly.
+
+**What I decided.** The goal, and the trade-offs. On the weekend case I had the
+options laid out — refuse, fall back silently, or fall back visibly — and chose
+the third, because refusing breaks the tool on a third of the calendar and
+falling back silently is the one thing the brief forbids. Same for refusing
+future dates instead of letting the upstream answer them with today's rate. The
+rule the whole service is built on is the one I would defend at a whiteboard:
+answer what can be answered, say exactly what you are answering when it is not
+the question asked, and return an error when nothing true is available.
+
+**What the assistant wrote.** Essentially all of the code, the tests, and the
+first drafts of these documents.
+
+**What I did with it.** I did not sign off on code I could not explain. I went
+through the request path module by module, then had the assistant put me through
+an oral exam on my own submission — its questions, my answers, no looking at the
+code. That is how I found the parts I had accepted without understanding. Two
+examples: I could not say how many upstream calls a future-dated request makes
+(the answer is zero — `parse_date` rejects it before anything is asked), and I
+had the wrong reason for parsing `amount` by hand (it is the error-body shape and
+`Decimal`, not any distrust of FastAPI's parsing). I went back to both.
+
+Then I ran it rather than trusting it: the suite on my own machine (Windows,
+Python 3.13, 60 passing), and the real service against the live Frankfurter API,
+checking six cases by hand. One of them was accidental proof that the design
+matters — asked on 3 September before the ECB's afternoon publication, the
+service returned the 2 September rate and said so, which is exactly the case
+`tool.py` mislabels.
 
 ## One thing the AI got wrong
 
-The `note` field. When a caller does not pass a date at all, the first version
-still produced *"The ECB published no rate for 2026-09-03"* — but nobody had
-asked about 2026-09-03; they asked for the latest rate. The sentence invented a
+The `note` field. When a caller passes no date at all, the first version still
+produced *"The ECB published no rate for 2026-09-03"* — but nobody had asked
+about 2026-09-03; they asked for the latest rate. The sentence invented a
 question in order to apologise for it, and an agent reading it to a customer
 would have sounded confused.
 
-The tests did not catch it, because the test I had asked for only asserted that
-a `note` existed. I found it by starting the service against a local stub and
-reading the actual response. I split the wording — a request without a date now
-gets *"The most recent rate the ECB has published is from 2026-08-28."* — and
-changed the test to assert the exact sentence rather than its presence, which is
-the real lesson: for a field a language model is going to read out loud, the
-wording *is* the behaviour, so the test has to pin it.
+To be accurate about who caught it: the assistant did, when it started the
+service against a local stub and read the response, not me. What I take from it
+is the part that matters anyway — **the test was the real defect.** It asserted
+only that a `note` existed, so the wording could be nonsense and still pass. The
+fix pinned the exact sentence. For a field a language model is going to read out
+loud to a customer, the wording *is* the behaviour, and a test that does not
+assert it is not testing anything.
